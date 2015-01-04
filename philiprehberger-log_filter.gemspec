@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
 
   spec.summary       = "Pattern-based log filtering with drop, replace, and preset rules"
   spec.description   = "Pattern-based log filtering — drop or transform log lines matching rules. " \
-                        "Includes preset filters for health checks, static assets, and bot traffic."
+                       "Includes preset filters for health checks, static assets, and bot traffic."
   spec.homepage      = "https://github.com/philiprehberger/rb-log-filter"
   spec.license       = "MIT"
 
@@ -18,7 +18,8 @@ Gem::Specification.new do |spec|
 
   spec.metadata["homepage_uri"]    = spec.homepage
   spec.metadata["source_code_uri"] = spec.homepage
-  spec.metadata["changelog_uri"]   = "#{spec.homepage}/blob/main/CHANGELOG.md"
+  spec.metadata["changelog_uri"]        = "#{spec.homepage}/blob/main/CHANGELOG.md"
+  spec.metadata["rubygems_mfa_required"] = "true"
 
   spec.files = Dir["lib/**/*.rb", "LICENSE", "README.md", "CHANGELOG.md"]
   spec.require_paths = ["lib"]
