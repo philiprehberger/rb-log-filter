@@ -2,6 +2,7 @@
 
 [![Tests](https://github.com/philiprehberger/rb-log-filter/actions/workflows/ci.yml/badge.svg)](https://github.com/philiprehberger/rb-log-filter/actions/workflows/ci.yml)
 [![Gem Version](https://badge.fury.io/rb/philiprehberger-log_filter.svg)](https://rubygems.org/gems/philiprehberger-log_filter)
+[![License](https://img.shields.io/github/license/philiprehberger/rb-log-filter)](LICENSE)
 
 Pattern-based log filtering with drop, replace, and preset rules.
 
