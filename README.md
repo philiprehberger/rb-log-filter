@@ -4,7 +4,7 @@
 [![Gem Version](https://badge.fury.io/rb/philiprehberger-log_filter.svg)](https://rubygems.org/gems/philiprehberger-log_filter)
 [![License](https://img.shields.io/github/license/philiprehberger/rb-log-filter)](LICENSE)
 
-Pattern-based log filtering with drop, replace, and preset rules.
+Pattern-based log filtering with drop, replace, and preset rules
 
 ## Requirements
 
