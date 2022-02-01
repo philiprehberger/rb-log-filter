@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-29
+
+### Added
+
+- Sampling support via `Filter#sample(pattern, rate:)` — pass through only a fraction of matching messages
+- Filter statistics via `Filter#stats` and `Filter#reset_stats!` — thread-safe atomic counters for dropped, passed, replaced, and sampled messages
+- Structured log support via `Filter#drop_field(key)` and `Filter#mask_field(key, with:)` — parse JSON messages, remove or mask fields, re-serialize
+
 ## [0.1.7] - 2026-03-26
 
 ### Changed
