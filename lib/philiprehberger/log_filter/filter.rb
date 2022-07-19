@@ -159,12 +159,10 @@ module Philiprehberger
       def apply_sample_rule(rule, message)
         return message unless message.match?(rule[:pattern])
 
-        if SecureRandom.rand < rule[:rate]
-          increment_stat(:sampled)
-          message
-        else
-          nil
-        end
+        return unless SecureRandom.rand < rule[:rate]
+
+        increment_stat(:sampled)
+        message
       end
 
       # @param rule [Hash] a drop_field rule
