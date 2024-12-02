@@ -3,23 +3,23 @@
 require_relative 'lib/philiprehberger/log_filter/version'
 
 Gem::Specification.new do |spec|
-  spec.name          = 'philiprehberger-log_filter'
-  spec.version       = Philiprehberger::LogFilter::VERSION
-  spec.authors       = ['Philip Rehberger']
-  spec.email         = ['me@philiprehberger.com']
+  spec.name = 'philiprehberger-log_filter'
+  spec.version = Philiprehberger::LogFilter::VERSION
+  spec.authors = ['Philip Rehberger']
+  spec.email = ['me@philiprehberger.com']
 
-  spec.summary       = 'Pattern-based log filtering with drop, replace, and preset rules'
-  spec.description   = 'Pattern-based log filtering — drop or transform log lines matching rules. ' \
+  spec.summary = 'Pattern-based log filtering with drop, replace, and preset rules'
+  spec.description = 'Pattern-based log filtering — drop or transform log lines matching rules. ' \
                        'Includes preset filters for health checks, static assets, and bot traffic.'
-  spec.homepage      = 'https://philiprehberger.com/open-source-packages/ruby/philiprehberger-log_filter'
-  spec.license       = 'MIT'
+  spec.homepage = 'https://philiprehberger.com/open-source-packages/ruby/philiprehberger-log_filter'
+  spec.license = 'MIT'
 
   spec.required_ruby_version = '>= 3.1.0'
 
   spec.metadata['homepage_uri'] = spec.homepage
-  spec.metadata['source_code_uri']       = 'https://github.com/philiprehberger/rb-log-filter'
-  spec.metadata['changelog_uri']         = 'https://github.com/philiprehberger/rb-log-filter/blob/main/CHANGELOG.md'
-  spec.metadata['bug_tracker_uri']       = 'https://github.com/philiprehberger/rb-log-filter/issues'
+  spec.metadata['source_code_uri'] = 'https://github.com/philiprehberger/rb-log-filter'
+  spec.metadata['changelog_uri'] = 'https://github.com/philiprehberger/rb-log-filter/blob/main/CHANGELOG.md'
+  spec.metadata['bug_tracker_uri'] = 'https://github.com/philiprehberger/rb-log-filter/issues'
   spec.metadata['rubygems_mfa_required'] = 'true'
 
   spec.files = Dir['lib/**/*.rb', 'LICENSE', 'README.md', 'CHANGELOG.md']
