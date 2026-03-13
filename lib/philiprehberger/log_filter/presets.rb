@@ -9,7 +9,7 @@ module Philiprehberger
       #
       # @return [Filter] a filter suppressing health-check paths
       def self.health_check
-        Filter.new.drop(/health_?check|\/health|\/ping|\/ready|\/alive/i)
+        Filter.new.drop(%r{health_?check|/health|/ping|/ready|/alive}i)
       end
 
       # Filter that drops static-asset request log lines.
