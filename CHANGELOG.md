@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-03-13
+
+### Fixed
+- Fix RuboCop ExtraSpacing offense in gemspec metadata
+
 ## [0.1.0] - 2026-03-13
 
 ### Added
