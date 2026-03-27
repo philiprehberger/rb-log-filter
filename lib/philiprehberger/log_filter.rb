@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require_relative "log_filter/version"
-require_relative "log_filter/filter"
-require_relative "log_filter/wrapper"
-require_relative "log_filter/presets"
+require_relative 'log_filter/version'
+require_relative 'log_filter/filter'
+require_relative 'log_filter/wrapper'
+require_relative 'log_filter/presets'
 
 module Philiprehberger
   module LogFilter
