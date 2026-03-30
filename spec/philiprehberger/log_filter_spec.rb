@@ -2,6 +2,7 @@
 
 require 'spec_helper'
 require 'logger'
+require 'json'
 
 RSpec.describe Philiprehberger::LogFilter do
   it 'has a version number' do
@@ -67,8 +68,6 @@ RSpec.describe Philiprehberger::LogFilter do
       end
     end
 
-    # --- Expanded tests ---
-
     describe '#rules' do
       it 'returns an empty array for a new filter' do
         expect(filter.rules).to eq([])
@@ -131,6 +130,262 @@ RSpec.describe Philiprehberger::LogFilter do
         expect(filter.apply('this is secret data')).to be_nil
       end
     end
+
+    # --- Sampling ---
+
+    describe '#sample' do
+      it 'returns self for chaining' do
+        result = filter.sample(/debug/, rate: 0.5)
+        expect(result).to be filter
+      end
+
+      it 'raises ArgumentError for rate below 0.0' do
+        expect { filter.sample(/debug/, rate: -0.1) }.to raise_error(ArgumentError)
+      end
+
+      it 'raises ArgumentError for rate above 1.0' do
+        expect { filter.sample(/debug/, rate: 1.5) }.to raise_error(ArgumentError)
+      end
+
+      it 'passes non-matching messages through unaffected' do
+        filter.sample(/debug/, rate: 0.0)
+        expect(filter.apply('info: normal message')).to eq('info: normal message')
+      end
+
+      it 'drops all matching messages when rate is 0.0' do
+        filter.sample(/debug/, rate: 0.0)
+        10.times do
+          expect(filter.apply('debug: some noise')).to be_nil
+        end
+      end
+
+      it 'passes all matching messages when rate is 1.0' do
+        filter.sample(/debug/, rate: 1.0)
+        10.times do
+          expect(filter.apply('debug: some noise')).to eq('debug: some noise')
+        end
+      end
+
+      it 'passes approximately the correct fraction of matching messages' do
+        filter.sample(/debug/, rate: 0.5)
+        allow(SecureRandom).to receive(:rand).and_return(0.3, 0.7, 0.1, 0.9, 0.4)
+
+        results = 5.times.map { filter.apply('debug: message') }
+        passed = results.compact.count
+        dropped = results.count(nil)
+
+        expect(passed).to eq(3)
+        expect(dropped).to eq(2)
+      end
+
+      it 'increments sampled stat for passed matching messages' do
+        filter.sample(/debug/, rate: 1.0)
+        filter.apply('debug: message')
+        expect(filter.stats[:sampled]).to eq(1)
+      end
+
+      it 'increments dropped stat for dropped matching messages' do
+        filter.sample(/debug/, rate: 0.0)
+        filter.apply('debug: message')
+        expect(filter.stats[:dropped]).to eq(1)
+      end
+
+      it 'adds a sample rule to the rules list' do
+        filter.sample(/debug/, rate: 0.5)
+        expect(filter.rules.last[:type]).to eq(:sample)
+      end
+    end
+
+    # --- Filter Statistics ---
+
+    describe '#stats' do
+      it 'returns initial zeroed stats' do
+        expect(filter.stats).to eq({ dropped: 0, passed: 0, replaced: 0, sampled: 0 })
+      end
+
+      it 'returns a copy of the stats hash' do
+        stats = filter.stats
+        stats[:dropped] = 999
+        expect(filter.stats[:dropped]).to eq(0)
+      end
+
+      it 'increments passed counter on successful apply' do
+        filter.apply('hello')
+        expect(filter.stats[:passed]).to eq(1)
+      end
+
+      it 'increments dropped counter when a message is dropped' do
+        filter.drop(/secret/)
+        filter.apply('secret data')
+        expect(filter.stats[:dropped]).to eq(1)
+      end
+
+      it 'increments replaced counter when a replacement occurs' do
+        filter.replace(/foo/, 'bar')
+        filter.apply('foo baz')
+        expect(filter.stats[:replaced]).to eq(1)
+      end
+
+      it 'does not increment replaced counter when no replacement occurs' do
+        filter.replace(/foo/, 'bar')
+        filter.apply('baz qux')
+        expect(filter.stats[:replaced]).to eq(0)
+      end
+
+      it 'tracks multiple operations correctly' do
+        filter.drop(/drop_me/).replace(/secret/, '[REDACTED]')
+
+        filter.apply('drop_me please')
+        filter.apply('has secret info')
+        filter.apply('normal message')
+
+        expect(filter.stats[:dropped]).to eq(1)
+        expect(filter.stats[:replaced]).to eq(1)
+        expect(filter.stats[:passed]).to eq(2)
+      end
+
+      it 'is thread-safe' do
+        threads = 10.times.map do
+          Thread.new do
+            100.times { filter.apply('message') }
+          end
+        end
+        threads.each(&:join)
+        expect(filter.stats[:passed]).to eq(1000)
+      end
+    end
+
+    describe '#reset_stats!' do
+      it 'zeroes all counters' do
+        filter.drop(/secret/)
+        filter.apply('secret data')
+        filter.apply('normal data')
+
+        filter.reset_stats!
+        expect(filter.stats).to eq({ dropped: 0, passed: 0, replaced: 0, sampled: 0 })
+      end
+    end
+
+    # --- Structured Log Support ---
+
+    describe '#drop_field' do
+      it 'returns self for chaining' do
+        result = filter.drop_field('password')
+        expect(result).to be filter
+      end
+
+      it 'removes the specified field from a JSON message' do
+        filter.drop_field('password')
+        input = JSON.generate({ 'user' => 'alice', 'password' => 'secret123' })
+        result = JSON.parse(filter.apply(input))
+        expect(result).to eq({ 'user' => 'alice' })
+      end
+
+      it 'passes through JSON messages that do not contain the field' do
+        filter.drop_field('password')
+        input = JSON.generate({ 'user' => 'alice' })
+        result = JSON.parse(filter.apply(input))
+        expect(result).to eq({ 'user' => 'alice' })
+      end
+
+      it 'passes non-JSON messages through unmodified' do
+        filter.drop_field('password')
+        expect(filter.apply('plain text message')).to eq('plain text message')
+      end
+
+      it 'passes non-object JSON through unmodified' do
+        filter.drop_field('password')
+        expect(filter.apply('[1, 2, 3]')).to eq('[1, 2, 3]')
+      end
+
+      it 'accepts symbol keys by converting to string' do
+        filter.drop_field(:password)
+        input = JSON.generate({ 'password' => 'secret123', 'user' => 'alice' })
+        result = JSON.parse(filter.apply(input))
+        expect(result).to eq({ 'user' => 'alice' })
+      end
+
+      it 'can remove multiple fields with chaining' do
+        filter.drop_field('password').drop_field('token')
+        input = JSON.generate({ 'user' => 'alice', 'password' => 'secret', 'token' => 'abc' })
+        result = JSON.parse(filter.apply(input))
+        expect(result).to eq({ 'user' => 'alice' })
+      end
+    end
+
+    describe '#mask_field' do
+      it 'returns self for chaining' do
+        result = filter.mask_field('password')
+        expect(result).to be filter
+      end
+
+      it 'masks the specified field with default mask' do
+        filter.mask_field('password')
+        input = JSON.generate({ 'user' => 'alice', 'password' => 'secret123' })
+        result = JSON.parse(filter.apply(input))
+        expect(result).to eq({ 'user' => 'alice', 'password' => '***' })
+      end
+
+      it 'masks the specified field with custom mask' do
+        filter.mask_field('email', with: '[REDACTED]')
+        input = JSON.generate({ 'user' => 'alice', 'email' => 'alice@example.com' })
+        result = JSON.parse(filter.apply(input))
+        expect(result).to eq({ 'user' => 'alice', 'email' => '[REDACTED]' })
+      end
+
+      it 'passes through JSON messages that do not contain the field' do
+        filter.mask_field('password')
+        input = JSON.generate({ 'user' => 'alice' })
+        result = JSON.parse(filter.apply(input))
+        expect(result).to eq({ 'user' => 'alice' })
+      end
+
+      it 'does not increment replaced stat when field is absent' do
+        filter.mask_field('password')
+        filter.apply(JSON.generate({ 'user' => 'alice' }))
+        expect(filter.stats[:replaced]).to eq(0)
+      end
+
+      it 'increments replaced stat when field is masked' do
+        filter.mask_field('password')
+        filter.apply(JSON.generate({ 'password' => 'secret' }))
+        expect(filter.stats[:replaced]).to eq(1)
+      end
+
+      it 'passes non-JSON messages through unmodified' do
+        filter.mask_field('password')
+        expect(filter.apply('plain text message')).to eq('plain text message')
+      end
+
+      it 'passes non-object JSON through unmodified' do
+        filter.mask_field('password')
+        expect(filter.apply('"just a string"')).to eq('"just a string"')
+      end
+
+      it 'accepts symbol keys by converting to string' do
+        filter.mask_field(:password, with: 'XXX')
+        input = JSON.generate({ 'password' => 'secret123' })
+        result = JSON.parse(filter.apply(input))
+        expect(result).to eq({ 'password' => 'XXX' })
+      end
+    end
+
+    describe 'combined structured and pattern rules' do
+      it 'can combine drop_field with drop pattern rules' do
+        filter.drop_field('debug_info').drop(/ERROR/)
+        input = JSON.generate({ 'level' => 'info', 'debug_info' => 'verbose' })
+        result = JSON.parse(filter.apply(input))
+        expect(result).to eq({ 'level' => 'info' })
+      end
+
+      it 'can combine mask_field with replace rules' do
+        filter.mask_field('ssn').replace(/token=\w+/, 'token=[REDACTED]')
+        input = JSON.generate({ 'ssn' => '123-45-6789', 'msg' => 'token=abc123' })
+        result = JSON.parse(filter.apply(input))
+        expect(result['ssn']).to eq('***')
+        expect(result['msg']).to eq('token=[REDACTED]')
+      end
+    end
   end
 
   describe Philiprehberger::LogFilter::Wrapper do
@@ -161,8 +416,6 @@ RSpec.describe Philiprehberger::LogFilter do
         expect(logger).to have_received(level).with('test message')
       end
     end
-
-    # --- Expanded tests ---
 
     describe 'block-based messages' do
       it 'evaluates block when no message is given' do
@@ -278,8 +531,6 @@ RSpec.describe Philiprehberger::LogFilter do
       end
     end
   end
-
-  # --- Expanded module-level tests ---
 
   describe '.health_check_filter' do
     it 'returns a filter that drops health checks' do

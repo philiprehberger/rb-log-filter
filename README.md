@@ -2,7 +2,11 @@
 
 [![Tests](https://github.com/philiprehberger/rb-log-filter/actions/workflows/ci.yml/badge.svg)](https://github.com/philiprehberger/rb-log-filter/actions/workflows/ci.yml)
 [![Gem Version](https://badge.fury.io/rb/philiprehberger-log_filter.svg)](https://rubygems.org/gems/philiprehberger-log_filter)
+[![GitHub release](https://img.shields.io/github/v/release/philiprehberger/rb-log-filter)](https://github.com/philiprehberger/rb-log-filter/releases)
+[![Last updated](https://img.shields.io/github/last-commit/philiprehberger/rb-log-filter)](https://github.com/philiprehberger/rb-log-filter/commits/main)
 [![License](https://img.shields.io/github/license/philiprehberger/rb-log-filter)](LICENSE)
+[![Bug Reports](https://img.shields.io/github/issues/philiprehberger/rb-log-filter/bug)](https://github.com/philiprehberger/rb-log-filter/issues?q=is%3Aissue+is%3Aopen+label%3Abug)
+[![Feature Requests](https://img.shields.io/github/issues/philiprehberger/rb-log-filter/enhancement)](https://github.com/philiprehberger/rb-log-filter/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement)
 [![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-ec6cb9)](https://github.com/sponsors/philiprehberger)
 
 Pattern-based log filtering with drop, replace, and preset rules
@@ -63,6 +67,8 @@ filtered_logger.info("GET /api/users 200")       # logs normally
 ### Using Presets
 
 ```ruby
+require "philiprehberger/log_filter"
+
 # Drop health-check noise
 filter = Philiprehberger::LogFilter.health_check_filter
 filtered_logger = Philiprehberger::LogFilter.wrap(logger, filter)
@@ -77,9 +83,58 @@ filter = Philiprehberger::LogFilter.bot_filter
 ### Block-Based Drop Rules
 
 ```ruby
+require "philiprehberger/log_filter"
+
 filter = Philiprehberger::LogFilter::Filter.new
   .drop_if { |msg| msg.length > 1000 }   # drop excessively long messages
   .drop_if { |msg| msg.count("\n") > 10 } # drop multi-line spam
+```
+
+### Sampling
+
+```ruby
+require "philiprehberger/log_filter"
+
+# Only pass through 10% of debug messages
+filter = Philiprehberger::LogFilter::Filter.new
+  .sample(/DEBUG/, rate: 0.1)
+
+filter.apply("DEBUG verbose output")  # => nil (90% of the time)
+filter.apply("INFO normal message")   # => "INFO normal message" (always passes)
+```
+
+### Structured Log Support
+
+```ruby
+require "philiprehberger/log_filter"
+
+filter = Philiprehberger::LogFilter::Filter.new
+  .drop_field("password")
+  .mask_field("ssn", with: "***")
+
+filter.apply('{"user":"alice","password":"secret","ssn":"123-45-6789"}')
+# => '{"user":"alice","ssn":"***"}'
+
+# Non-JSON messages pass through unmodified
+filter.apply("plain text log line")  # => "plain text log line"
+```
+
+### Filter Statistics
+
+```ruby
+require "philiprehberger/log_filter"
+
+filter = Philiprehberger::LogFilter::Filter.new
+  .drop(/DEBUG/)
+  .replace(/secret/, "[REDACTED]")
+
+filter.apply("DEBUG noise")
+filter.apply("has secret data")
+filter.apply("normal message")
+
+filter.stats  # => { dropped: 1, passed: 2, replaced: 1, sampled: 0 }
+filter.reset_stats!
+filter.stats  # => { dropped: 0, passed: 0, replaced: 0, sampled: 0 }
 ```
 
 ## API
@@ -90,7 +145,12 @@ filter = Philiprehberger::LogFilter::Filter.new
 | `Filter#drop(pattern)` | Add a regex drop rule; returns self |
 | `Filter#drop_if(&block)` | Add a block-based drop rule; returns self |
 | `Filter#replace(pattern, replacement)` | Add a replacement rule; returns self |
+| `Filter#sample(pattern, rate:)` | Add a sampling rule; only pass rate fraction of matches |
+| `Filter#drop_field(key)` | Remove a field from JSON log messages; returns self |
+| `Filter#mask_field(key, with:)` | Mask a field value in JSON log messages; returns self |
 | `Filter#apply(message)` | Run all rules; returns transformed string or nil |
+| `Filter#stats` | Return counters: dropped, passed, replaced, sampled |
+| `Filter#reset_stats!` | Zero all statistics counters |
 | `Wrapper.new(logger, filter)` | Wrap a Logger with a filter |
 | `Presets.health_check` | Filter dropping health-check paths |
 | `Presets.assets` | Filter dropping static-asset requests |
@@ -107,6 +167,13 @@ bundle install
 bundle exec rspec
 bundle exec rubocop
 ```
+
+## Support
+
+If you find this package useful, consider giving it a star on GitHub — it helps motivate continued maintenance and development.
+
+[![LinkedIn](https://img.shields.io/badge/Philip%20Rehberger-LinkedIn-0A66C2?logo=linkedin)](https://www.linkedin.com/in/philiprehberger)
+[![More packages](https://img.shields.io/badge/more-open%20source%20packages-blue)](https://philiprehberger.com/open-source-packages)
 
 ## License
 
