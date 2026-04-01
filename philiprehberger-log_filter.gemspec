@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
 
   spec.summary = 'Pattern-based log filtering with drop, replace, and preset rules'
   spec.description = 'Pattern-based log filtering — drop or transform log lines matching rules. ' \
-                       'Includes preset filters for health checks, static assets, and bot traffic.'
+                     'Includes preset filters for health checks, static assets, and bot traffic.'
   spec.homepage = 'https://philiprehberger.com/open-source-packages/ruby/philiprehberger-log_filter'
   spec.license = 'MIT'
 
