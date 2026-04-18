@@ -114,6 +114,30 @@ filter.apply('{"user":"alice","password":"secret","ssn":"123-45-6789"}')
 filter.apply("plain text log line")  # => "plain text log line"
 ```
 
+### Chaining filters
+
+Compose two filters into a new filter whose `apply` pipes each event through
+the first filter and then through the second. If the first filter drops the
+event (returns `nil`), the second is skipped. Composition is associative, so
+`a.chain(b).chain(c)` works as expected.
+
+```ruby
+require "philiprehberger/log_filter"
+
+redact = Philiprehberger::LogFilter::Filter.new
+  .replace(/password=\S+/, "password=[REDACTED]")
+
+drop_debug = Philiprehberger::LogFilter::Filter.new
+  .drop(/DEBUG/)
+
+pipeline = drop_debug.chain(redact)
+
+pipeline.apply("DEBUG noise")                     # => nil (dropped by first filter)
+pipeline.apply("login password=abc123")           # => "login password=[REDACTED]"
+```
+
+The chained filter tracks its own `stats` independently of the source filters.
+
 ### Filter Statistics
 
 ```ruby
@@ -144,6 +168,7 @@ filter.stats  # => { dropped: 0, passed: 0, replaced: 0, sampled: 0 }
 | `Filter#drop_field(key)` | Remove a field from JSON log messages; returns self |
 | `Filter#mask_field(key, with:)` | Mask a field value in JSON log messages; returns self |
 | `Filter#apply(message)` | Run all rules; returns transformed string or nil |
+| `Filter#chain(other)` | Compose with another filter; returns a new filter piping events through both |
 | `Filter#stats` | Return counters: dropped, passed, replaced, sampled |
 | `Filter#reset_stats!` | Zero all statistics counters |
 | `Wrapper.new(logger, filter)` | Wrap a Logger with a filter |
