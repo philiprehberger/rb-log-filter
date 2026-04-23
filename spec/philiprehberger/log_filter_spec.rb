@@ -370,6 +370,102 @@ RSpec.describe Philiprehberger::LogFilter do
       end
     end
 
+    describe '#chain' do
+      it 'returns a new Filter instance' do
+        a = described_class.new.drop(/foo/)
+        b = described_class.new.replace(/bar/, 'baz')
+        chained = a.chain(b)
+
+        expect(chained).to be_a(Philiprehberger::LogFilter::Filter)
+        expect(chained).not_to be a
+        expect(chained).not_to be b
+      end
+
+      it 'does not mutate either source filter' do
+        a = described_class.new.drop(/foo/)
+        b = described_class.new.replace(/bar/, 'baz')
+        a_rules_before = a.rules.dup
+        b_rules_before = b.rules.dup
+
+        a.chain(b)
+
+        expect(a.rules).to eq(a_rules_before)
+        expect(b.rules).to eq(b_rules_before)
+      end
+
+      it 'pipes the output of the first filter through the second' do
+        a = described_class.new.mask_field('password')
+        b = described_class.new.drop_field('debug')
+
+        input = JSON.generate({ 'user' => 'alice', 'password' => 'secret', 'debug' => 'verbose' })
+        result = JSON.parse(a.chain(b).apply(input))
+
+        expect(result).to eq({ 'user' => 'alice', 'password' => '***' })
+      end
+
+      it 'short-circuits when the first filter drops the event' do
+        a = described_class.new.drop(/secret/)
+        b = described_class.new.replace(/./, 'X')
+        allow(b).to receive(:apply).and_call_original
+
+        chained = a.chain(b)
+
+        expect(chained.apply('this is secret')).to be_nil
+        expect(b).not_to have_received(:apply)
+      end
+
+      it 'returns nil when the second filter drops the event' do
+        a = described_class.new.replace(/foo/, 'bar')
+        b = described_class.new.drop(/bar/)
+
+        expect(a.chain(b).apply('foo input')).to be_nil
+      end
+
+      it 'is equivalent to calling b.apply(a.apply(event))' do
+        a = described_class.new.replace(/secret/, '[REDACTED]')
+        b = described_class.new.replace(/\[REDACTED\]/, '###')
+
+        input = 'my secret value'
+        expected = b.apply(a.apply(input))
+
+        a2 = described_class.new.replace(/secret/, '[REDACTED]')
+        b2 = described_class.new.replace(/\[REDACTED\]/, '###')
+        expect(a2.chain(b2).apply(input)).to eq(expected)
+      end
+
+      it 'composes associatively for three filters' do
+        a = described_class.new.replace(/a/, 'A')
+        b = described_class.new.replace(/b/, 'B')
+        c = described_class.new.replace(/c/, 'C')
+
+        left_assoc = a.chain(b).chain(c).apply('abc')
+        right_assoc = a.chain(b.chain(c)).apply('abc')
+
+        expect(left_assoc).to eq('ABC')
+        expect(right_assoc).to eq('ABC')
+      end
+
+      it 'raises ArgumentError when given a non-Filter argument' do
+        a = described_class.new
+
+        expect { a.chain('not a filter') }.to raise_error(ArgumentError)
+        expect { a.chain(nil) }.to raise_error(ArgumentError)
+        expect { a.chain(42) }.to raise_error(ArgumentError)
+      end
+
+      it 'tracks stats independently on the chained filter' do
+        a = described_class.new.drop(/drop/)
+        b = described_class.new.replace(/foo/, 'bar')
+        chained = a.chain(b)
+
+        chained.apply('drop this')
+        chained.apply('foo please')
+
+        expect(chained.stats[:dropped]).to eq(1)
+        expect(chained.stats[:passed]).to eq(1)
+      end
+    end
+
     describe 'combined structured and pattern rules' do
       it 'can combine drop_field with drop pattern rules' do
         filter.drop_field('debug_info').drop(/ERROR/)

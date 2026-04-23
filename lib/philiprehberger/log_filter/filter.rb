@@ -121,6 +121,27 @@ module Philiprehberger
         result
       end
 
+      # Compose this filter with +other+ into a new filter.
+      #
+      # The returned filter's +apply+ runs +self.apply+ first and passes the
+      # result through +other.apply+. If the first filter drops the message
+      # (returns +nil+), the second filter is not invoked and the chained
+      # apply returns +nil+. Composition is associative, so
+      # +a.chain(b).chain(c)+ behaves transitively.
+      #
+      # The chained filter tracks its own +stats+ independently of the two
+      # source filters; each source filter continues to track its own
+      # counters when invoked.
+      #
+      # @param other [Filter] the filter to run after this one
+      # @return [Filter] a new filter composing +self+ and +other+
+      # @raise [ArgumentError] if +other+ is not a {Filter}
+      def chain(other)
+        raise ArgumentError, 'other must be a Philiprehberger::LogFilter::Filter' unless other.is_a?(Filter)
+
+        ChainedFilter.new(self, other)
+      end
+
       private
 
       # @param stat [Symbol] the stat key to increment
@@ -203,6 +224,43 @@ module Philiprehberger
         result.is_a?(Hash) ? result : nil
       rescue JSON::ParserError
         nil
+      end
+    end
+
+    # A filter produced by {Filter#chain} that pipes events through two
+    # source filters in order. Tracks its own stats independently of the
+    # inputs. Short-circuits when the first filter drops the event.
+    #
+    # @api private
+    class ChainedFilter < Filter
+      # @param first [Filter] the filter to run first
+      # @param second [Filter] the filter to run on +first+'s output
+      def initialize(first, second)
+        super()
+        @first = first
+        @second = second
+      end
+
+      # Run +first.apply+ then +second.apply+. If the first returns +nil+,
+      # the second is skipped and +nil+ is returned.
+      #
+      # @param message [String] the log message to filter
+      # @return [String, nil] the transformed message, or +nil+ if dropped
+      def apply(message)
+        intermediate = @first.apply(message)
+        if intermediate.nil?
+          increment_stat(:dropped)
+          return nil
+        end
+
+        result = @second.apply(intermediate)
+        if result.nil?
+          increment_stat(:dropped)
+          return nil
+        end
+
+        increment_stat(:passed)
+        result
       end
     end
   end

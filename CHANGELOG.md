@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-17
+
+### Added
+- `Filter#chain(other)` composes two filters into a new filter that pipes events through both in order (drops short-circuit)
+
 ## [0.2.1] - 2026-03-31
 
 ### Changed
