@@ -138,6 +138,22 @@ pipeline.apply("login password=abc123")           # => "login password=[REDACTED
 
 The chained filter tracks its own `stats` independently of the source filters.
 
+### PII and Secret Redaction Presets
+
+```ruby
+require "philiprehberger/log_filter"
+
+pii = Philiprehberger::LogFilter::Presets.pii
+pii.apply("login user=alice@example.com")     # => "login user=[REDACTED]"
+pii.apply("SSN 123-45-6789 lookup")           # => "SSN [REDACTED] lookup"
+pii.apply("card 4242424242424242 charged")    # => "card [REDACTED] charged"
+
+secrets = Philiprehberger::LogFilter::Presets.secrets
+secrets.apply("Authorization: Bearer abc.def-_xyz")  # => "Authorization: Bearer [REDACTED]"
+secrets.apply("GET /v1?api_key=sk_live_xyz123 200")  # => "GET /v1?api_key=[REDACTED] 200"
+secrets.apply("AKIAIOSFODNN7EXAMPLE in env")          # => "[REDACTED] in env"
+```
+
 ### Filter Statistics
 
 ```ruby
@@ -175,6 +191,8 @@ filter.stats  # => { dropped: 0, passed: 0, replaced: 0, sampled: 0 }
 | `Presets.health_check` | Filter dropping health-check paths |
 | `Presets.assets` | Filter dropping static-asset requests |
 | `Presets.bots` | Filter dropping bot/crawler traffic |
+| `Presets.pii` | Filter redacting emails, SSNs, and credit-card-shaped numbers with `[REDACTED]` |
+| `Presets.secrets` | Filter redacting Bearer tokens, `api_key=`/`access_token=` values, and AWS access keys |
 | `LogFilter.wrap(logger, filter)` | Convenience wrapper constructor |
 | `LogFilter.health_check_filter` | Shortcut for `Presets.health_check` |
 | `LogFilter.asset_filter` | Shortcut for `Presets.assets` |

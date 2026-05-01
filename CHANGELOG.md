@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-30
+
+### Added
+- `Presets.pii` — redacts emails, US Social Security Numbers, and 13–19 digit credit-card-shaped numbers with `[REDACTED]`
+- `Presets.secrets` — redacts `Bearer` tokens, `api_key=`/`access_token=` parameters, and AWS-style access key IDs (`AKIA…`) with `[REDACTED]`
+
 ## [0.3.0] - 2026-04-17
 
 ### Added

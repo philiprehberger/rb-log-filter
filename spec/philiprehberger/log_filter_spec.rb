@@ -626,6 +626,46 @@ RSpec.describe Philiprehberger::LogFilter do
         expect(filter.apply('Mozilla/5.0 request')).to eq('Mozilla/5.0 request')
       end
     end
+
+    describe '.pii' do
+      subject(:filter) { described_class.pii }
+
+      it 'redacts email addresses' do
+        expect(filter.apply('login user=alice@example.com')).to eq('login user=[REDACTED]')
+      end
+
+      it 'redacts SSN-format numbers' do
+        expect(filter.apply('SSN 123-45-6789 lookup')).to eq('SSN [REDACTED] lookup')
+      end
+
+      it 'redacts credit-card-shaped numbers' do
+        expect(filter.apply('card 4242424242424242 charged')).to eq('card [REDACTED] charged')
+      end
+
+      it 'leaves a clean line untouched' do
+        expect(filter.apply('GET /api/users 200')).to eq('GET /api/users 200')
+      end
+    end
+
+    describe '.secrets' do
+      subject(:filter) { described_class.secrets }
+
+      it 'redacts Bearer tokens' do
+        expect(filter.apply('Authorization: Bearer abc123.def456-_xyz')).to eq('Authorization: Bearer [REDACTED]')
+      end
+
+      it 'redacts api_key= parameters' do
+        expect(filter.apply('GET /v1?api_key=sk_live_xyz123 200')).to eq('GET /v1?api_key=[REDACTED] 200')
+      end
+
+      it 'redacts AWS access keys' do
+        expect(filter.apply('using AKIAIOSFODNN7EXAMPLE today')).to eq('using [REDACTED] today')
+      end
+
+      it 'leaves a clean line untouched' do
+        expect(filter.apply('GET /healthz 200')).to eq('GET /healthz 200')
+      end
+    end
   end
 
   describe '.health_check_filter' do
