@@ -370,6 +370,93 @@ RSpec.describe Philiprehberger::LogFilter do
       end
     end
 
+    describe '#truncate' do
+      it 'returns self for chaining' do
+        result = filter.truncate(50)
+        expect(result).to be filter
+      end
+
+      it 'passes through messages shorter than max_length unchanged' do
+        filter.truncate(20)
+        expect(filter.apply('short message')).to eq('short message')
+      end
+
+      it 'passes through messages exactly max_length unchanged' do
+        filter.truncate(5)
+        expect(filter.apply('hello')).to eq('hello')
+      end
+
+      it 'truncates messages longer than max_length and appends default suffix' do
+        filter.truncate(10)
+        result = filter.apply('hello world, this is too long')
+        expect(result.length).to eq(10)
+        expect(result).to end_with('…')
+        expect(result).to eq('hello wor…')
+      end
+
+      it 'appends a custom suffix when provided' do
+        filter.truncate(10, suffix: '...')
+        result = filter.apply('hello world, this is too long')
+        expect(result.length).to eq(10)
+        expect(result).to eq('hello w...')
+      end
+
+      it 'raises ArgumentError when max_length is zero' do
+        expect { filter.truncate(0) }.to raise_error(ArgumentError)
+      end
+
+      it 'raises ArgumentError when max_length is negative' do
+        expect { filter.truncate(-5) }.to raise_error(ArgumentError)
+      end
+
+      it 'raises ArgumentError when max_length is not an Integer' do
+        expect { filter.truncate(10.5) }.to raise_error(ArgumentError)
+        expect { filter.truncate('10') }.to raise_error(ArgumentError)
+        expect { filter.truncate(nil) }.to raise_error(ArgumentError)
+      end
+
+      it 'composes with drop rules — drop still drops' do
+        filter.drop(/secret/).truncate(10)
+        expect(filter.apply('this has secret data')).to be_nil
+      end
+
+      it 'composes with drop rules — passing messages still get truncated' do
+        filter.drop(/secret/).truncate(10)
+        result = filter.apply('this is a normal long message')
+        expect(result.length).to eq(10)
+        expect(result).to end_with('…')
+      end
+
+      it 'composes with replace rules' do
+        filter.replace(/password=\S+/, 'password=[REDACTED]').truncate(20)
+        result = filter.apply('user login password=abc123 long extra tail')
+        expect(result.length).to eq(20)
+        expect(result).to end_with('…')
+      end
+
+      it 'never drops a message — only transforms it' do
+        filter.truncate(3)
+        expect(filter.apply('much longer than three')).not_to be_nil
+      end
+
+      it 'handles suffix.length equal to max_length by returning suffix truncated to max_length' do
+        filter.truncate(3, suffix: '...')
+        result = filter.apply('a long string')
+        expect(result).to eq('...')
+      end
+
+      it 'handles suffix.length greater than max_length by returning suffix truncated to max_length' do
+        filter.truncate(2, suffix: '...')
+        result = filter.apply('a long string')
+        expect(result).to eq('..')
+      end
+
+      it 'adds a truncate rule to the rules list' do
+        filter.truncate(50)
+        expect(filter.rules.last[:type]).to eq(:truncate)
+      end
+    end
+
     describe '#chain' do
       it 'returns a new Filter instance' do
         a = described_class.new.drop(/foo/)

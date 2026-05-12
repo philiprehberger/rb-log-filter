@@ -86,6 +86,22 @@ module Philiprehberger
         self
       end
 
+      # Add a rule that caps outgoing messages at +max_length+ characters,
+      # appending +suffix+ when truncation occurred. Messages shorter than
+      # or equal to +max_length+ pass through unchanged. Never drops a
+      # message, only transforms it.
+      #
+      # @param max_length [Integer] the maximum length of the message in characters
+      # @param suffix [String] the string appended when truncation occurs
+      # @return [self] for chaining
+      # @raise [ArgumentError] if +max_length+ is not a positive Integer
+      def truncate(max_length, suffix: '…')
+        raise ArgumentError, 'max_length must be a positive Integer' unless max_length.is_a?(Integer) && max_length.positive?
+
+        @rules << { type: :truncate, max_length: max_length, suffix: suffix }
+        self
+      end
+
       # Return current filter statistics.
       #
       # @return [Hash] counters for :dropped, :passed, :replaced, :sampled
@@ -171,6 +187,8 @@ module Philiprehberger
           apply_drop_field_rule(rule, message)
         when :mask_field
           apply_mask_field_rule(rule, message)
+        when :truncate
+          apply_truncate_rule(rule, message)
         end
       end
 
@@ -213,6 +231,20 @@ module Philiprehberger
         JSON.generate(parsed)
       rescue StandardError
         message
+      end
+
+      # @param rule [Hash] a truncate rule
+      # @param message [String] the current message
+      # @return [String]
+      def apply_truncate_rule(rule, message)
+        return message if message.length <= rule[:max_length]
+
+        suffix = rule[:suffix]
+        max_length = rule[:max_length]
+
+        return suffix[0, max_length] if suffix.length >= max_length
+
+        message[0, max_length - suffix.length] + suffix
       end
 
       # Attempt to parse a string as JSON.

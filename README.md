@@ -183,6 +183,7 @@ filter.stats  # => { dropped: 0, passed: 0, replaced: 0, sampled: 0 }
 | `Filter#sample(pattern, rate:)` | Add a sampling rule; only pass rate fraction of matches |
 | `Filter#drop_field(key)` | Remove a field from JSON log messages; returns self |
 | `Filter#mask_field(key, with:)` | Mask a field value in JSON log messages; returns self |
+| `Filter#truncate(max_length, suffix:)` | Truncate outgoing messages longer than max_length and append the suffix; returns self |
 | `Filter#apply(message)` | Run all rules; returns transformed string or nil |
 | `Filter#chain(other)` | Compose with another filter; returns a new filter piping events through both |
 | `Filter#stats` | Return counters: dropped, passed, replaced, sampled |
