@@ -39,6 +39,21 @@ module Philiprehberger
               .replace(/\b\d(?:[ -]?\d){12,18}\b/, '[REDACTED]')
       end
 
+      # Filter that keeps only HTTP request-line log entries, dropping
+      # everything else.
+      #
+      # Matches the standard verbs (`GET`, `POST`, `PUT`, `PATCH`,
+      # `DELETE`, `HEAD`, `OPTIONS`) followed by whitespace and a path
+      # starting with `/`. Useful for stripping access logs down to just
+      # the request lines.
+      #
+      # @return [Filter] a filter that drops non-request-line entries
+      def self.urls_only
+        Filter.new.drop_if do |message|
+          !message.match?(%r{\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+/})
+        end
+      end
+
       # Filter that redacts common secret patterns from log lines.
       #
       # Replaces Bearer tokens, `api_key=...`/`api-key=...` values, and

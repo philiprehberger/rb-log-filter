@@ -4,6 +4,8 @@
 [![Gem Version](https://badge.fury.io/rb/philiprehberger-log_filter.svg)](https://rubygems.org/gems/philiprehberger-log_filter)
 [![Last updated](https://img.shields.io/github/last-commit/philiprehberger/rb-log-filter)](https://github.com/philiprehberger/rb-log-filter/commits/main)
 
+![philiprehberger-log_filter](https://raw.githubusercontent.com/philiprehberger/rb-log-filter/main/package-card.webp)
+
 Pattern-based log filtering with drop, replace, and preset rules
 
 ## Requirements
@@ -154,6 +156,33 @@ secrets.apply("GET /v1?api_key=sk_live_xyz123 200")  # => "GET /v1?api_key=[REDA
 secrets.apply("AKIAIOSFODNN7EXAMPLE in env")          # => "[REDACTED] in env"
 ```
 
+### Inspecting Messages with tap_each
+
+Insert a side-effecting hook into the pipeline. The block runs for every message that reaches its position (after any previous transforms); its return value is ignored.
+
+```ruby
+require "philiprehberger/log_filter"
+
+count = 0
+filter = Philiprehberger::LogFilter::Filter.new
+  .replace(/secret/, "[REDACTED]")
+  .tap_each { |msg| count += 1 if msg.length > 100 }
+
+filter.apply("short")
+filter.apply("a" * 200)
+count  # => 1
+```
+
+### Keeping Only HTTP Request Lines
+
+```ruby
+require "philiprehberger/log_filter"
+
+filter = Philiprehberger::LogFilter.urls_only_filter
+filter.apply("GET /api/users 200")  # => "GET /api/users 200"
+filter.apply("worker booted")       # => nil
+```
+
 ### Filter Statistics
 
 ```ruby
@@ -184,6 +213,7 @@ filter.stats  # => { dropped: 0, passed: 0, replaced: 0, sampled: 0 }
 | `Filter#drop_field(key)` | Remove a field from JSON log messages; returns self |
 | `Filter#mask_field(key, with:)` | Mask a field value in JSON log messages; returns self |
 | `Filter#truncate(max_length, suffix:)` | Truncate outgoing messages longer than max_length and append the suffix; returns self |
+| `Filter#tap_each(&block)` | Invoke the block with every message passing through; message is forwarded unchanged; returns self |
 | `Filter#apply(message)` | Run all rules; returns transformed string or nil |
 | `Filter#chain(other)` | Compose with another filter; returns a new filter piping events through both |
 | `Filter#stats` | Return counters: dropped, passed, replaced, sampled |
@@ -192,12 +222,14 @@ filter.stats  # => { dropped: 0, passed: 0, replaced: 0, sampled: 0 }
 | `Presets.health_check` | Filter dropping health-check paths |
 | `Presets.assets` | Filter dropping static-asset requests |
 | `Presets.bots` | Filter dropping bot/crawler traffic |
+| `Presets.urls_only` | Filter that keeps only HTTP request-line entries (`GET /…`, `POST /…`, …) and drops everything else |
 | `Presets.pii` | Filter redacting emails, SSNs, and credit-card-shaped numbers with `[REDACTED]` |
 | `Presets.secrets` | Filter redacting Bearer tokens, `api_key=`/`access_token=` values, and AWS access keys |
 | `LogFilter.wrap(logger, filter)` | Convenience wrapper constructor |
 | `LogFilter.health_check_filter` | Shortcut for `Presets.health_check` |
 | `LogFilter.asset_filter` | Shortcut for `Presets.assets` |
 | `LogFilter.bot_filter` | Shortcut for `Presets.bots` |
+| `LogFilter.urls_only_filter` | Shortcut for `Presets.urls_only` |
 
 ## Development
 

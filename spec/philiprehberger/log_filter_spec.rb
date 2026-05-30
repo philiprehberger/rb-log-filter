@@ -788,3 +788,66 @@ RSpec.describe Philiprehberger::LogFilter do
     end
   end
 end
+
+RSpec.describe Philiprehberger::LogFilter::Filter, '#tap_each' do
+  it 'invokes the block with every message that reaches the rule' do
+    seen = []
+    filter = described_class.new.tap_each { |msg| seen << msg }
+
+    filter.apply('first')
+    filter.apply('second')
+
+    expect(seen).to eq(%w[first second])
+  end
+
+  it 'passes the message through unchanged regardless of block return value' do
+    filter = described_class.new.tap_each { |_| 'ignored' }
+    expect(filter.apply('hello')).to eq('hello')
+  end
+
+  it 'sees the transformed message when placed after a replace rule' do
+    seen = []
+    filter = described_class.new
+                            .replace(/secret/, '[REDACTED]')
+                            .tap_each { |msg| seen << msg }
+
+    filter.apply('has secret data')
+
+    expect(seen).to eq(['has [REDACTED] data'])
+  end
+
+  it 'does not run when an earlier rule drops the message' do
+    seen = []
+    filter = described_class.new
+                            .drop(/DEBUG/)
+                            .tap_each { |msg| seen << msg }
+
+    filter.apply('DEBUG noise')
+
+    expect(seen).to be_empty
+  end
+
+  it 'returns self for chaining' do
+    filter = described_class.new
+    expect(filter.tap_each { |_| nil }).to equal(filter)
+  end
+end
+
+RSpec.describe Philiprehberger::LogFilter::Presets, '.urls_only' do
+  it 'keeps standard HTTP request-line entries' do
+    filter = described_class.urls_only
+    expect(filter.apply('GET /api/users 200')).to eq('GET /api/users 200')
+    expect(filter.apply('POST /api/orders 201')).to eq('POST /api/orders 201')
+    expect(filter.apply('DELETE /sessions/abc 204')).to eq('DELETE /sessions/abc 204')
+  end
+
+  it 'drops lines that are not request lines' do
+    filter = described_class.urls_only
+    expect(filter.apply('worker booted')).to be_nil
+    expect(filter.apply('Some debug noise')).to be_nil
+  end
+
+  it 'drops verbs without a leading slash path' do
+    expect(described_class.urls_only.apply('GET api/users 200')).to be_nil
+  end
+end

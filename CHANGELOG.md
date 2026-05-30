@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-29
+
+### Added
+- `Filter#tap_each(&block)` — invoke the block with every message that reaches the rule; message is forwarded unchanged. Useful for instrumentation and counters.
+- `Presets.urls_only` and `LogFilter.urls_only_filter` shortcut — drop everything that isn't a standard HTTP request-line entry (`GET /…`, `POST /…`, etc.).
+
 ## [0.5.0] - 2026-05-12
 
 ### Added

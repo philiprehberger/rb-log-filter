@@ -86,6 +86,23 @@ module Philiprehberger
         self
       end
 
+      # Add a side-effecting inspection rule. The block is called with every
+      # message that reaches this stage of the pipeline (after any previous
+      # transforms applied). The message is then passed through unchanged —
+      # the block's return value is ignored. Exceptions raised inside the
+      # block are not swallowed.
+      #
+      # Useful for counting, metrics emission, or attaching to a debugger
+      # without altering the filter output.
+      #
+      # @yield [message] receives the current message
+      # @yieldparam message [String]
+      # @return [self] for chaining
+      def tap_each(&block)
+        @rules << { type: :tap, block: block }
+        self
+      end
+
       # Add a rule that caps outgoing messages at +max_length+ characters,
       # appending +suffix+ when truncation occurred. Messages shorter than
       # or equal to +max_length+ pass through unchanged. Never drops a
@@ -189,6 +206,9 @@ module Philiprehberger
           apply_mask_field_rule(rule, message)
         when :truncate
           apply_truncate_rule(rule, message)
+        when :tap
+          rule[:block].call(message)
+          message
         end
       end
 

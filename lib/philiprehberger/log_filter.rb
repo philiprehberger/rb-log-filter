@@ -21,6 +21,10 @@ module Philiprehberger
       Presets.bots
     end
 
+    def self.urls_only_filter
+      Presets.urls_only
+    end
+
     def self.wrap(logger, filter)
       Wrapper.new(logger, filter)
     end
