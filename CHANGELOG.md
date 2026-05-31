@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-30
+
+### Added
+- `Filter#describe_rules` returns an array of `{type:, description:}` hashes describing each configured rule for debugging and logging
+- `Filter#explain(message)` runs a message through the chain without mutating stats or invoking tap blocks, returning the transformed result plus a per-rule decision trace
+
 ## [0.6.0] - 2026-05-29
 
 ### Added

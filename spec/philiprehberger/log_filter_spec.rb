@@ -833,6 +833,133 @@ RSpec.describe Philiprehberger::LogFilter::Filter, '#tap_each' do
   end
 end
 
+RSpec.describe Philiprehberger::LogFilter::Filter, '#describe_rules' do
+  it 'returns an empty array for a new filter' do
+    expect(described_class.new.describe_rules).to eq([])
+  end
+
+  it 'describes a chain of multiple rule types in order' do
+    filter = described_class.new
+                            .drop(/DEBUG/)
+                            .replace(/password=\S+/, 'password=[REDACTED]')
+                            .sample(/INFO/, rate: 0.25)
+                            .mask_field('ssn')
+                            .truncate(80, suffix: '...')
+
+    descriptions = filter.describe_rules
+
+    expect(descriptions.size).to eq(5)
+    expect(descriptions[0]).to eq(type: :drop_pattern, description: 'drop matching /DEBUG/')
+    expect(descriptions[1]).to eq(
+      type: :replace,
+      description: 'replace /password=\\S+/ with "password=[REDACTED]"'
+    )
+    expect(descriptions[2]).to eq(type: :sample, description: 'sample /INFO/ at rate 0.25')
+    expect(descriptions[3]).to eq(type: :mask_field, description: 'mask field "ssn" with "***"')
+    expect(descriptions[4]).to eq(
+      type: :truncate,
+      description: 'truncate to 80 chars with suffix "..."'
+    )
+  end
+
+  it 'describes drop_if, drop_field, and tap rules' do
+    filter = described_class.new
+                            .drop_if { |_| false }
+                            .drop_field('debug_info')
+                            .tap_each { |_| nil }
+
+    descriptions = filter.describe_rules
+
+    expect(descriptions[0]).to eq(type: :drop_block, description: 'drop if block returns truthy')
+    expect(descriptions[1]).to eq(type: :drop_field, description: 'drop field "debug_info"')
+    expect(descriptions[2]).to eq(type: :tap, description: 'tap each message (side effect)')
+  end
+end
+
+RSpec.describe Philiprehberger::LogFilter::Filter, '#explain' do
+  it 'returns the transformed message and per-rule decisions when a message passes' do
+    filter = described_class.new
+                            .drop(/DEBUG/)
+                            .replace(/password=\S+/, 'password=[REDACTED]')
+
+    trace = filter.explain('user login password=abc123')
+
+    expect(trace[:result]).to eq('user login password=[REDACTED]')
+    expect(trace[:decisions]).to eq([
+                                      { rule: 0, type: :drop_pattern, matched: false, action: :passed },
+                                      { rule: 1, type: :replace,      matched: true,  action: :replaced }
+                                    ])
+  end
+
+  it 'short-circuits at the rule that drops the message' do
+    filter = described_class.new
+                            .replace(/foo/, 'bar')
+                            .drop(/bar/)
+                            .replace(/never/, 'reached')
+
+    trace = filter.explain('foo input')
+
+    expect(trace[:result]).to be_nil
+    expect(trace[:decisions].size).to eq(2)
+    expect(trace[:decisions][0]).to eq(rule: 0, type: :replace,      matched: true, action: :replaced)
+    expect(trace[:decisions][1]).to eq(rule: 1, type: :drop_pattern, matched: true, action: :dropped)
+  end
+
+  it 'reports :masked when mask_field key is present in JSON' do
+    filter = described_class.new.mask_field('ssn', with: 'XXX')
+
+    input = JSON.generate({ 'user' => 'alice', 'ssn' => '123-45-6789' })
+    trace = filter.explain(input)
+
+    expect(JSON.parse(trace[:result])).to eq({ 'user' => 'alice', 'ssn' => 'XXX' })
+    expect(trace[:decisions]).to eq([
+                                      { rule: 0, type: :mask_field, matched: true, action: :masked }
+                                    ])
+  end
+
+  it 'reports :unchanged when mask_field key is absent in JSON' do
+    filter = described_class.new.mask_field('ssn')
+
+    input = JSON.generate({ 'user' => 'alice' })
+    trace = filter.explain(input)
+
+    expect(JSON.parse(trace[:result])).to eq({ 'user' => 'alice' })
+    expect(trace[:decisions]).to eq([
+                                      { rule: 0, type: :mask_field, matched: false, action: :unchanged }
+                                    ])
+  end
+
+  it 'does not increment stats counters' do
+    filter = described_class.new
+                            .drop(/DEBUG/)
+                            .replace(/secret/, '[REDACTED]')
+                            .mask_field('ssn')
+
+    stats_before = filter.stats
+
+    filter.explain('DEBUG noisy line')
+    filter.explain('has secret value')
+    filter.explain('plain message')
+    filter.explain(JSON.generate({ 'ssn' => '123-45-6789' }))
+
+    expect(filter.stats).to eq(stats_before)
+    expect(filter.stats).to eq({ dropped: 0, passed: 0, replaced: 0, sampled: 0 })
+  end
+
+  it 'does not invoke tap_each blocks' do
+    tap_invocations = 0
+    filter = described_class.new
+                            .replace(/secret/, '[REDACTED]')
+                            .tap_each { |_| tap_invocations += 1 }
+
+    trace = filter.explain('has secret data')
+
+    expect(tap_invocations).to eq(0)
+    expect(trace[:result]).to eq('has [REDACTED] data')
+    expect(trace[:decisions].last).to eq(rule: 1, type: :tap, matched: true, action: :tapped)
+  end
+end
+
 RSpec.describe Philiprehberger::LogFilter::Presets, '.urls_only' do
   it 'keeps standard HTTP request-line entries' do
     filter = described_class.urls_only

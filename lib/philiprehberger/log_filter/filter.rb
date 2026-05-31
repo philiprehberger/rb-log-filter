@@ -154,6 +154,55 @@ module Philiprehberger
         result
       end
 
+      # Return a human-readable description of every rule in the chain,
+      # in declaration order. Useful for debugging, logging, or rendering
+      # the filter configuration in an admin UI.
+      #
+      # Does not mutate any state and does not invoke any rule blocks.
+      #
+      # @return [Array<Hash{Symbol=>Object}>] one hash per rule with
+      #   +:type+ (the rule's symbol type) and +:description+ (a
+      #   human-readable string)
+      def describe_rules
+        @rules.map { |r| { type: r[:type], description: describe_rule(r) } }
+      end
+
+      # Run +message+ through the chain WITHOUT mutating stats and WITHOUT
+      # invoking any +tap_each+ blocks. Returns a trace describing what
+      # each rule did to the message, plus the final transformed value
+      # (or +nil+ if the chain would have dropped it).
+      #
+      # Intended for debugging filter configurations. Because +:sample+
+      # rules are stochastic, this method treats a sample rule as a
+      # deterministic +sampled_in+ when its pattern matches (it shows the
+      # path the message would take if the sample passed). This makes
+      # +explain+ deterministic and side-effect-free.
+      #
+      # @param message [String] the log message to trace
+      # @return [Hash] with +:result+ (the transformed message or +nil+)
+      #   and +:decisions+ (an array of per-rule decision hashes). Each
+      #   decision hash has +:rule+ (0-indexed integer), +:type+ (the
+      #   rule's symbol), +:matched+ (whether the rule applied), and
+      #   +:action+ (one of +:passed+, +:dropped+, +:replaced+, +:masked+,
+      #   +:sampled_in+, +:sampled_out+, +:truncated+, +:tapped+,
+      #   +:unchanged+).
+      def explain(message)
+        decisions = []
+        result = message.dup
+
+        @rules.each_with_index do |rule, idx|
+          decision, new_result = explain_rule(rule, result, idx)
+          decisions << decision
+          if decision[:action] == :dropped
+            return { result: nil, decisions: decisions }
+          end
+
+          result = new_result
+        end
+
+        { result: result, decisions: decisions }
+      end
+
       # Compose this filter with +other+ into a new filter.
       #
       # The returned filter's +apply+ runs +self.apply+ first and passes the
@@ -276,6 +325,102 @@ module Philiprehberger
         result.is_a?(Hash) ? result : nil
       rescue JSON::ParserError
         nil
+      end
+
+      # Render a single rule as a human-readable string.
+      #
+      # @param rule [Hash] a single rule hash
+      # @return [String]
+      def describe_rule(rule)
+        case rule[:type]
+        when :drop_pattern
+          "drop matching #{rule[:pattern].inspect}"
+        when :drop_block
+          'drop if block returns truthy'
+        when :replace
+          "replace #{rule[:pattern].inspect} with #{rule[:replacement].inspect}"
+        when :sample
+          "sample #{rule[:pattern].inspect} at rate #{rule[:rate]}"
+        when :drop_field
+          "drop field #{rule[:key].inspect}"
+        when :mask_field
+          "mask field #{rule[:key].inspect} with #{rule[:mask].inspect}"
+        when :truncate
+          "truncate to #{rule[:max_length]} chars with suffix #{rule[:suffix].inspect}"
+        when :tap
+          'tap each message (side effect)'
+        end
+      end
+
+      # Trace a single rule for {#explain}. Returns a [decision, new_message]
+      # pair. Never mutates stats and never calls user-supplied tap blocks.
+      #
+      # @param rule [Hash] a single rule hash
+      # @param message [String] the current message
+      # @param idx [Integer] the 0-based index of the rule in the chain
+      # @return [Array(Hash, String)]
+      def explain_rule(rule, message, idx)
+        case rule[:type]
+        when :drop_pattern
+          if message.match?(rule[:pattern])
+            [{ rule: idx, type: rule[:type], matched: true, action: :dropped }, message]
+          else
+            [{ rule: idx, type: rule[:type], matched: false, action: :passed }, message]
+          end
+        when :drop_block
+          if rule[:block].call(message)
+            [{ rule: idx, type: rule[:type], matched: true, action: :dropped }, message]
+          else
+            [{ rule: idx, type: rule[:type], matched: false, action: :passed }, message]
+          end
+        when :replace
+          replaced = message.gsub(rule[:pattern], rule[:replacement])
+          if replaced == message
+            [{ rule: idx, type: rule[:type], matched: false, action: :unchanged }, message]
+          else
+            [{ rule: idx, type: rule[:type], matched: true, action: :replaced }, replaced]
+          end
+        when :sample
+          if message.match?(rule[:pattern])
+            [{ rule: idx, type: rule[:type], matched: true, action: :sampled_in }, message]
+          else
+            [{ rule: idx, type: rule[:type], matched: false, action: :unchanged }, message]
+          end
+        when :drop_field
+          parsed = parse_json(message)
+          if parsed&.key?(rule[:key])
+            parsed.delete(rule[:key])
+            [{ rule: idx, type: rule[:type], matched: true, action: :replaced },
+             JSON.generate(parsed)]
+          else
+            [{ rule: idx, type: rule[:type], matched: false, action: :unchanged }, message]
+          end
+        when :mask_field
+          parsed = parse_json(message)
+          if parsed&.key?(rule[:key])
+            parsed[rule[:key]] = rule[:mask]
+            [{ rule: idx, type: rule[:type], matched: true, action: :masked },
+             JSON.generate(parsed)]
+          else
+            [{ rule: idx, type: rule[:type], matched: false, action: :unchanged }, message]
+          end
+        when :truncate
+          if message.length > rule[:max_length]
+            suffix = rule[:suffix]
+            max_length = rule[:max_length]
+            new_msg = if suffix.length >= max_length
+                        suffix[0, max_length]
+                      else
+                        message[0, max_length - suffix.length] + suffix
+                      end
+            [{ rule: idx, type: rule[:type], matched: true, action: :truncated }, new_msg]
+          else
+            [{ rule: idx, type: rule[:type], matched: false, action: :unchanged }, message]
+          end
+        when :tap
+          # Intentionally do not invoke the tap block — explain is side-effect-free.
+          [{ rule: idx, type: rule[:type], matched: true, action: :tapped }, message]
+        end
       end
     end
 

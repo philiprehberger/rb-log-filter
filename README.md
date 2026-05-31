@@ -183,6 +183,44 @@ filter.apply("GET /api/users 200")  # => "GET /api/users 200"
 filter.apply("worker booted")       # => nil
 ```
 
+### Debugging filters with `explain`
+
+When a filter chain isn't behaving as expected, use `#describe_rules` to dump the configuration and `#explain(message)` to trace how a specific message flows through. `#explain` is side-effect-free — it does NOT mutate `#stats` and does NOT invoke `tap_each` blocks. Sample rules are treated deterministically (a match counts as `:sampled_in`) so traces are reproducible.
+
+```ruby
+require "philiprehberger/log_filter"
+
+filter = Philiprehberger::LogFilter::Filter.new
+  .drop(/DEBUG/)
+  .replace(/password=\S+/, "password=[REDACTED]")
+  .mask_field("ssn")
+
+filter.describe_rules
+# => [
+#   { type: :drop_pattern, description: "drop matching /DEBUG/" },
+#   { type: :replace,      description: "replace /password=\\S+/ with \"password=[REDACTED]\"" },
+#   { type: :mask_field,   description: "mask field \"ssn\" with \"***\"" }
+# ]
+
+filter.explain("user login password=abc123")
+# => {
+#   result: "user login password=[REDACTED]",
+#   decisions: [
+#     { rule: 0, type: :drop_pattern, matched: false, action: :passed },
+#     { rule: 1, type: :replace,      matched: true,  action: :replaced },
+#     { rule: 2, type: :mask_field,   matched: false, action: :unchanged }
+#   ]
+# }
+
+filter.explain("DEBUG noisy line")
+# => {
+#   result: nil,
+#   decisions: [
+#     { rule: 0, type: :drop_pattern, matched: true, action: :dropped }
+#   ]
+# }
+```
+
 ### Filter Statistics
 
 ```ruby
@@ -216,6 +254,8 @@ filter.stats  # => { dropped: 0, passed: 0, replaced: 0, sampled: 0 }
 | `Filter#tap_each(&block)` | Invoke the block with every message passing through; message is forwarded unchanged; returns self |
 | `Filter#apply(message)` | Run all rules; returns transformed string or nil |
 | `Filter#chain(other)` | Compose with another filter; returns a new filter piping events through both |
+| `Filter#describe_rules` | Return an array of `{type:, description:}` hashes describing every rule in order |
+| `Filter#explain(message)` | Trace how a message flows through the chain without mutating stats or invoking tap blocks; returns `{result:, decisions:}` |
 | `Filter#stats` | Return counters: dropped, passed, replaced, sampled |
 | `Filter#reset_stats!` | Zero all statistics counters |
 | `Wrapper.new(logger, filter)` | Wrap a Logger with a filter |
